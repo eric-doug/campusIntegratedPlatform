@@ -6,6 +6,70 @@ CREATE DATABASE park_service;
 -- Connect to industrial database and create tables
 \c industrial;
 
+-- Users table (shared across all platforms)
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    phone VARCHAR(20),
+    email VARCHAR(100),
+    status VARCHAR(20) DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Roles table
+CREATE TABLE roles (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    code VARCHAR(50) UNIQUE NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- User roles association
+CREATE TABLE user_roles (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    role_id INTEGER REFERENCES roles(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(user_id, role_id)
+);
+
+-- Platform permissions
+CREATE TABLE platform_permissions (
+    id SERIAL PRIMARY KEY,
+    role_id INTEGER REFERENCES roles(id) ON DELETE CASCADE,
+    platform VARCHAR(50) NOT NULL,
+    resource VARCHAR(50) NOT NULL,
+    action VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(role_id, platform, resource, action)
+);
+
+-- Insert default roles
+INSERT INTO roles (name, code, description) VALUES
+    ('系统管理员', 'admin', '系统管理员，拥有所有权限'),
+    ('平台管理员', 'platform_admin', '平台管理员'),
+    ('普通用户', 'user', '普通用户');
+
+-- Insert default admin user (password: admin123)
+INSERT INTO users (username, password_hash, status) VALUES
+    ('admin', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.qVh.N9NJ.KQXCK', 'active');
+
+-- Assign admin role to default user
+INSERT INTO user_roles (user_id, role_id) VALUES (1, 1);
+
+-- Insert admin permissions
+INSERT INTO platform_permissions (role_id, platform, resource, action) VALUES
+    (1, 'industrial', '*', '*'),
+    (1, 'supply', '*', '*'),
+    (1, 'park', '*', '*'),
+    (2, 'industrial', 'products', 'read'),
+    (2, 'industrial', 'orders', 'read'),
+    (2, 'supply', 'inventory', 'read'),
+    (2, 'park', 'enterprises', 'read');
+
 CREATE TABLE suppliers (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
