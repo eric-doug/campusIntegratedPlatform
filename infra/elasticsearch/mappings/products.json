@@ -1,0 +1,15 @@
+{
+  "mappings": {
+    "properties": {
+      "name": { "type": "text", "analyzer": "ik_max_word", "search_analyzer": "ik_smart" },
+      "description": { "type": "text", "analyzer": "ik_max_word", "search_analyzer": "ik_smart" },
+      "category_name": { "type": "keyword" },
+      "supplier_name": { "type": "keyword" },
+      "price": { "type": "double" },
+      "specs": { "type": "object", "enabled": true },
+      "status": { "type": "keyword" },
+      "embedding": { "type": "dense_vector", "dims": 1536, "index": true, "similarity": "cosine" },
+      "created_at": { "type": "date" }
+    }
+  }
+}

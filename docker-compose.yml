@@ -1,0 +1,201 @@
+version: '3.8'
+
+services:
+  # Infrastructure
+  postgres:
+    image: postgres:16
+    container_name: campus-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-campus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-campus_dev_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-campus_platform}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - campus-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: campus-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./infra/redis/redis.conf:/usr/local/etc/redis/redis.conf
+    command: redis-server /usr/local/etc/redis/redis.conf
+    networks:
+      - campus-network
+
+  elasticsearch:
+    image: elasticsearch:8.12.0
+    container_name: campus-es
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+      - ./infra/elasticsearch/mappings:/usr/share/elasticsearch/config/mappings
+    networks:
+      - campus-network
+
+  # Nginx Gateway
+  nginx-gateway:
+    image: nginx:1.25
+    container_name: campus-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - industrial-frontend
+      - industrial-backend
+      - supply-frontend
+      - supply-backend
+      - park-frontend
+      - park-backend
+    networks:
+      - campus-network
+
+  # Industrial Platform
+  industrial-frontend:
+    build:
+      context: ./industrial-platform/frontend
+      dockerfile: Dockerfile
+    container_name: campus-industrial-fe
+    ports:
+      - "3001:80"
+    networks:
+      - campus-network
+
+  industrial-backend:
+    build:
+      context: ./industrial-platform/backend
+      dockerfile: Dockerfile
+    container_name: campus-industrial-be
+    environment:
+      - FLASK_ENV=${FLASK_ENV:-development}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-campus}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-campus_dev_2026}
+      - POSTGRES_DB=industrial
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - ES_HOST=elasticsearch
+      - ES_PORT=9200
+      - AI_PROVIDER=${AI_PROVIDER:-openai}
+      - AI_API_KEY=${AI_API_KEY}
+      - AI_API_BASE=${AI_API_BASE}
+      - AI_MODEL=${AI_MODEL:-gpt-4o}
+      - JWT_SECRET=${JWT_SECRET:-change-this-in-production}
+    ports:
+      - "5001:5000"
+    volumes:
+      - ./industrial-platform/backend:/app
+      - ./shared:/shared
+    depends_on:
+      - postgres
+      - redis
+      - elasticsearch
+    networks:
+      - campus-network
+
+  # Supply Chain Platform
+  supply-frontend:
+    build:
+      context: ./supply-chain/frontend
+      dockerfile: Dockerfile
+    container_name: campus-supply-fe
+    ports:
+      - "3002:80"
+    networks:
+      - campus-network
+
+  supply-backend:
+    build:
+      context: ./supply-chain/backend
+      dockerfile: Dockerfile
+    container_name: campus-supply-be
+    environment:
+      - FLASK_ENV=${FLASK_ENV:-development}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-campus}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-campus_dev_2026}
+      - POSTGRES_DB=supply_chain
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - ES_HOST=elasticsearch
+      - ES_PORT=9200
+      - AI_PROVIDER=${AI_PROVIDER:-openai}
+      - AI_API_KEY=${AI_API_KEY}
+      - AI_API_BASE=${AI_API_BASE}
+      - AI_MODEL=${AI_MODEL:-gpt-4o}
+      - JWT_SECRET=${JWT_SECRET:-change-this-in-production}
+    ports:
+      - "5002:5000"
+    volumes:
+      - ./supply-chain/backend:/app
+      - ./shared:/shared
+    depends_on:
+      - postgres
+      - redis
+      - elasticsearch
+    networks:
+      - campus-network
+
+  # Park Service Platform
+  park-frontend:
+    build:
+      context: ./park-service/frontend
+      dockerfile: Dockerfile
+    container_name: campus-park-fe
+    ports:
+      - "3003:80"
+    networks:
+      - campus-network
+
+  park-backend:
+    build:
+      context: ./park-service/backend
+      dockerfile: Dockerfile
+    container_name: campus-park-be
+    environment:
+      - FLASK_ENV=${FLASK_ENV:-development}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-campus}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-campus_dev_2026}
+      - POSTGRES_DB=park_service
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - AI_PROVIDER=${AI_PROVIDER:-openai}
+      - AI_API_KEY=${AI_API_KEY}
+      - AI_API_BASE=${AI_API_BASE}
+      - AI_MODEL=${AI_MODEL:-gpt-4o}
+      - JWT_SECRET=${JWT_SECRET:-change-this-in-production}
+    ports:
+      - "5003:5000"
+    volumes:
+      - ./park-service/backend:/app
+      - ./shared:/shared
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - campus-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  es_data:
+
+networks:
+  campus-network:
+    driver: bridge
