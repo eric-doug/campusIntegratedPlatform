@@ -1,4 +1,5 @@
 from flask import Blueprint, request
+from sqlalchemy import text
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'shared'))
 from shared.auth.decorators import require_auth
@@ -18,19 +19,20 @@ def list_submissions():
     try:
         query = "SELECT id, form_id, department, status, submitted_at, feedback, reviewed_at FROM submissions WHERE 1=1"
         count_query = "SELECT COUNT(*) FROM submissions WHERE 1=1"
-        params = []
+        params = {}
         if form_id:
-            query += " AND form_id = %s"
-            count_query += " AND form_id = %s"
-            params.append(form_id)
+            query += " AND form_id = :form_id"
+            count_query += " AND form_id = :form_id"
+            params['form_id'] = form_id
         if department:
-            query += " AND department = %s"
-            count_query += " AND department = %s"
-            params.append(department)
-        total = session.execute(count_query, params).fetchone()[0]
-        query += " ORDER BY submitted_at DESC LIMIT %s OFFSET %s"
-        params.extend([per_page, (page - 1) * per_page])
-        results = session.execute(query, params).fetchall()
+            query += " AND department = :department"
+            count_query += " AND department = :department"
+            params['department'] = department
+        total = session.execute(text(count_query), params).fetchone()[0]
+        query += " ORDER BY submitted_at DESC LIMIT :limit OFFSET :offset"
+        params['limit'] = per_page
+        params['offset'] = (page - 1) * per_page
+        results = session.execute(text(query), params).fetchall()
         items = [{
             'id': r[0], 'form_id': r[1], 'department': r[2], 'status': r[3],
             'submitted_at': r[4].isoformat() if r[4] else None,
@@ -51,14 +53,14 @@ def create_submission():
     try:
         # Create submission
         result = session.execute(
-            "INSERT INTO submissions (form_id, department, status) VALUES (%s, %s, 'submitted') RETURNING id",
-            (data['form_id'], data['department'])
+            text("INSERT INTO submissions (form_id, department, status) VALUES (:form_id, :department, 'submitted') RETURNING id"),
+            {'form_id': data['form_id'], 'department': data['department']}
         )
         submission_id = result.fetchone()[0]
         # Update form status
         session.execute(
-            "UPDATE report_forms SET status = 'submitted', submitted_at = NOW() WHERE id = %s",
-            (data['form_id'],)
+            text("UPDATE report_forms SET status = 'submitted', submitted_at = NOW() WHERE id = :form_id"),
+            {'form_id': data['form_id']}
         )
         session.commit()
         return success_response({'id': submission_id}, 'Submission created', 201)
@@ -78,8 +80,8 @@ def review_submission(submission_id):
     session = db.get_session()
     try:
         session.execute(
-            "UPDATE submissions SET status = %s, feedback = %s, reviewed_at = NOW() WHERE id = %s",
-            (data['action'], data.get('feedback'), submission_id)
+            text("UPDATE submissions SET status = :action, feedback = :feedback, reviewed_at = NOW() WHERE id = :submission_id"),
+            {'action': data['action'], 'feedback': data.get('feedback'), 'submission_id': submission_id}
         )
         session.commit()
         return success_response(message=f'Submission {data["action"]}')

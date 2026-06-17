@@ -1,4 +1,5 @@
 from flask import Blueprint, request
+from sqlalchemy import text
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'shared'))
 from shared.auth.decorators import require_auth
@@ -17,15 +18,16 @@ def list_shipments():
     try:
         query = "SELECT id, tracking_no, origin, destination, carrier, status, current_location, eta, actual_arrival, created_at FROM shipments WHERE 1=1"
         count_query = "SELECT COUNT(*) FROM shipments WHERE 1=1"
-        params = []
+        params = {}
         if status:
-            query += " AND status = %s"
-            count_query += " AND status = %s"
-            params.append(status)
-        total = session.execute(count_query, params).fetchone()[0]
-        query += " ORDER BY created_at DESC LIMIT %s OFFSET %s"
-        params.extend([per_page, (page - 1) * per_page])
-        results = session.execute(query, params).fetchall()
+            query += " AND status = :status"
+            count_query += " AND status = :status"
+            params['status'] = status
+        total = session.execute(text(count_query), params).fetchone()[0]
+        query += " ORDER BY created_at DESC LIMIT :limit OFFSET :offset"
+        params['limit'] = per_page
+        params['offset'] = (page - 1) * per_page
+        results = session.execute(text(query), params).fetchall()
         items = [{
             'id': r[0], 'tracking_no': r[1], 'origin': r[2], 'destination': r[3],
             'carrier': r[4], 'status': r[5], 'current_location': r[6],
@@ -43,8 +45,8 @@ def get_shipment(shipment_id):
     session = db.get_session()
     try:
         result = session.execute(
-            "SELECT id, tracking_no, origin, destination, carrier, status, current_location, eta, actual_arrival, created_at FROM shipments WHERE id = %s",
-            (shipment_id,)
+            text("SELECT id, tracking_no, origin, destination, carrier, status, current_location, eta, actual_arrival, created_at FROM shipments WHERE id = :shipment_id"),
+            {'shipment_id': shipment_id}
         ).fetchone()
         if not result:
             return error_response('Shipment not found', 404)

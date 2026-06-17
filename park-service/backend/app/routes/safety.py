@@ -1,4 +1,5 @@
 from flask import Blueprint, request
+from sqlalchemy import text
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'shared'))
 from shared.auth.decorators import require_auth
@@ -17,15 +18,16 @@ def list_safety():
     try:
         query = "SELECT id, enterprise_id, type, incident_date, description, severity, measures, status, created_at FROM safety_records WHERE 1=1"
         count_query = "SELECT COUNT(*) FROM safety_records WHERE 1=1"
-        params = []
+        params = {}
         if enterprise_id:
-            query += " AND enterprise_id = %s"
-            count_query += " AND enterprise_id = %s"
-            params.append(enterprise_id)
-        total = session.execute(count_query, params).fetchone()[0]
-        query += " ORDER BY created_at DESC LIMIT %s OFFSET %s"
-        params.extend([per_page, (page - 1) * per_page])
-        results = session.execute(query, params).fetchall()
+            query += " AND enterprise_id = :enterprise_id"
+            count_query += " AND enterprise_id = :enterprise_id"
+            params['enterprise_id'] = enterprise_id
+        total = session.execute(text(count_query), params).fetchone()[0]
+        query += " ORDER BY created_at DESC LIMIT :limit OFFSET :offset"
+        params['limit'] = per_page
+        params['offset'] = (page - 1) * per_page
+        results = session.execute(text(query), params).fetchall()
         items = [{
             'id': r[0], 'enterprise_id': r[1], 'type': r[2],
             'incident_date': r[3].isoformat() if r[3] else None,
@@ -46,9 +48,9 @@ def create_safety():
     session = db.get_session()
     try:
         result = session.execute(
-            "INSERT INTO safety_records (enterprise_id, type, incident_date, description, severity, measures, status) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
-            (data['enterprise_id'], data['type'], data.get('incident_date'),
-             data.get('description'), data.get('severity'), data.get('measures'), data.get('status', 'pending'))
+            text("INSERT INTO safety_records (enterprise_id, type, incident_date, description, severity, measures, status) VALUES (:enterprise_id, :type, :incident_date, :description, :severity, :measures, :status) RETURNING id"),
+            {'enterprise_id': data['enterprise_id'], 'type': data['type'], 'incident_date': data.get('incident_date'),
+             'description': data.get('description'), 'severity': data.get('severity'), 'measures': data.get('measures'), 'status': data.get('status', 'pending')}
         )
         record_id = result.fetchone()[0]
         session.commit()

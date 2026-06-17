@@ -1,4 +1,5 @@
 from flask import Blueprint, request
+from sqlalchemy import text
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'shared'))
 from shared.auth.decorators import require_auth
@@ -14,7 +15,7 @@ def list_categories():
     session = db.get_session()
     try:
         result = session.execute(
-            "SELECT id, name, parent_id, level, sort_order, icon, status FROM categories WHERE status = 'active' ORDER BY sort_order, id"
+            text("SELECT id, name, parent_id, level, sort_order, icon, status FROM categories WHERE status = 'active' ORDER BY sort_order, id")
         )
         categories = [{
             'id': r[0], 'name': r[1], 'parent_id': r[2], 'level': r[3],
@@ -47,9 +48,9 @@ def create_category():
     session = db.get_session()
     try:
         result = session.execute(
-            "INSERT INTO categories (name, parent_id, level, sort_order, icon, status) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
-            (data['name'], data.get('parent_id'), data.get('level', 1),
-             data.get('sort_order', 0), data.get('icon'), data.get('status', 'active'))
+            text("INSERT INTO categories (name, parent_id, level, sort_order, icon, status) VALUES (:name, :parent_id, :level, :sort_order, :icon, :status) RETURNING id"),
+            {'name': data['name'], 'parent_id': data.get('parent_id'), 'level': data.get('level', 1),
+             'sort_order': data.get('sort_order', 0), 'icon': data.get('icon'), 'status': data.get('status', 'active')}
         )
         category_id = result.fetchone()[0]
         session.commit()

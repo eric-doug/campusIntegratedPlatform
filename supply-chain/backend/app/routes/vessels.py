@@ -1,4 +1,5 @@
 from flask import Blueprint, request
+from sqlalchemy import text
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'shared'))
 from shared.auth.decorators import require_auth
@@ -17,15 +18,16 @@ def list_vessels():
     try:
         query = "SELECT id, vessel_name, imo, port, eta, ata, berth_status, cargo_progress, raw_data, updated_at FROM vessel_dynamics WHERE 1=1"
         count_query = "SELECT COUNT(*) FROM vessel_dynamics WHERE 1=1"
-        params = []
+        params = {}
         if port:
-            query += " AND port = %s"
-            count_query += " AND port = %s"
-            params.append(port)
-        total = session.execute(count_query, params).fetchone()[0]
-        query += " ORDER BY updated_at DESC LIMIT %s OFFSET %s"
-        params.extend([per_page, (page - 1) * per_page])
-        results = session.execute(query, params).fetchall()
+            query += " AND port = :port"
+            count_query += " AND port = :port"
+            params['port'] = port
+        total = session.execute(text(count_query), params).fetchone()[0]
+        query += " ORDER BY updated_at DESC LIMIT :limit OFFSET :offset"
+        params['limit'] = per_page
+        params['offset'] = (page - 1) * per_page
+        results = session.execute(text(query), params).fetchall()
         items = [{
             'id': r[0], 'vessel_name': r[1], 'imo': r[2], 'port': r[3],
             'eta': r[4].isoformat() if r[4] else None, 'ata': r[5].isoformat() if r[5] else None,
@@ -46,9 +48,9 @@ def create_vessel():
     session = db.get_session()
     try:
         result = session.execute(
-            "INSERT INTO vessel_dynamics (vessel_name, imo, port, eta, berth_status, cargo_progress, raw_data) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
-            (data['vessel_name'], data.get('imo'), data.get('port'), data.get('eta'),
-             data.get('berth_status'), data.get('cargo_progress', 0), data.get('raw_data', {}))
+            text("INSERT INTO vessel_dynamics (vessel_name, imo, port, eta, berth_status, cargo_progress, raw_data) VALUES (:vessel_name, :imo, :port, :eta, :berth_status, :cargo_progress, :raw_data) RETURNING id"),
+            {'vessel_name': data['vessel_name'], 'imo': data.get('imo'), 'port': data.get('port'), 'eta': data.get('eta'),
+             'berth_status': data.get('berth_status'), 'cargo_progress': data.get('cargo_progress', 0), 'raw_data': str(data.get('raw_data', {}))}
         )
         vessel_id = result.fetchone()[0]
         session.commit()
@@ -65,8 +67,8 @@ def get_vessel(vessel_id):
     session = db.get_session()
     try:
         result = session.execute(
-            "SELECT id, vessel_name, imo, port, eta, ata, berth_status, cargo_progress, raw_data, updated_at FROM vessel_dynamics WHERE id = %s",
-            (vessel_id,)
+            text("SELECT id, vessel_name, imo, port, eta, ata, berth_status, cargo_progress, raw_data, updated_at FROM vessel_dynamics WHERE id = :vessel_id"),
+            {'vessel_id': vessel_id}
         ).fetchone()
         if not result:
             return error_response('Vessel not found', 404)

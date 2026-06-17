@@ -1,4 +1,5 @@
 from flask import Blueprint, request
+from sqlalchemy import text
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'shared'))
 from shared.auth.decorators import require_auth
@@ -23,29 +24,31 @@ def list_products():
     try:
         query = "SELECT id, name, category_id, supplier_id, specs, unit, description, images, status, created_at FROM products WHERE 1=1"
         count_query = "SELECT COUNT(*) FROM products WHERE 1=1"
-        params = []
+        params = {}
 
         if status:
-            query += " AND status = %s"
-            count_query += " AND status = %s"
-            params.append(status)
+            query += " AND status = :status"
+            count_query += " AND status = :status"
+            params['status'] = status
         if category_id:
-            query += " AND category_id = %s"
-            count_query += " AND category_id = %s"
-            params.append(category_id)
+            query += " AND category_id = :category_id"
+            count_query += " AND category_id = :category_id"
+            params['category_id'] = category_id
         if keyword:
-            query += " AND (name ILIKE %s OR description ILIKE %s)"
-            count_query += " AND (name ILIKE %s OR description ILIKE %s)"
-            params.extend([f'%{keyword}%', f'%{keyword}%'])
+            query += " AND (name ILIKE :keyword1 OR description ILIKE :keyword2)"
+            count_query += " AND (name ILIKE :keyword1 OR description ILIKE :keyword2)"
+            params['keyword1'] = f'%{keyword}%'
+            params['keyword2'] = f'%{keyword}%'
 
         # Count
-        total = session.execute(count_query, params).fetchone()[0]
+        total = session.execute(text(count_query), params).fetchone()[0]
 
         # Paginate
-        query += " ORDER BY created_at DESC LIMIT %s OFFSET %s"
-        params.extend([per_page, (page - 1) * per_page])
+        query += " ORDER BY created_at DESC LIMIT :limit OFFSET :offset"
+        params['limit'] = per_page
+        params['offset'] = (page - 1) * per_page
 
-        results = session.execute(query, params).fetchall()
+        results = session.execute(text(query), params).fetchall()
         items = [{
             'id': r[0], 'name': r[1], 'category_id': r[2], 'supplier_id': r[3],
             'specs': r[4], 'unit': r[5], 'description': r[6], 'images': r[7],
@@ -63,8 +66,8 @@ def get_product(product_id):
     session = db.get_session()
     try:
         result = session.execute(
-            "SELECT id, name, category_id, supplier_id, specs, unit, description, images, status, created_at FROM products WHERE id = %s",
-            (product_id,)
+            text("SELECT id, name, category_id, supplier_id, specs, unit, description, images, status, created_at FROM products WHERE id = :product_id"),
+            {'product_id': product_id}
         )
         product = result.fetchone()
         if not product:
@@ -72,8 +75,8 @@ def get_product(product_id):
 
         # Get SKUs
         sku_result = session.execute(
-            "SELECT id, sku_code, attributes, price, original_price, stock, min_order_qty, status FROM product_skus WHERE product_id = %s",
-            (product_id,)
+            text("SELECT id, sku_code, attributes, price, original_price, stock, min_order_qty, status FROM product_skus WHERE product_id = :product_id"),
+            {'product_id': product_id}
         )
         skus = [{
             'id': r[0], 'sku_code': r[1], 'attributes': r[2],
@@ -104,11 +107,11 @@ def create_product():
     session = db.get_session()
     try:
         result = session.execute(
-            """INSERT INTO products (name, category_id, supplier_id, specs, unit, description, images, status)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-            (data['name'], data.get('category_id'), data.get('supplier_id'),
-             data.get('specs', {}), data.get('unit'), data.get('description'),
-             data.get('images', []), data.get('status', 'active'))
+            text("""INSERT INTO products (name, category_id, supplier_id, specs, unit, description, images, status)
+               VALUES (:name, :category_id, :supplier_id, :specs, :unit, :description, :images, :status) RETURNING id"""),
+            {'name': data['name'], 'category_id': data.get('category_id'), 'supplier_id': data.get('supplier_id'),
+             'specs': str(data.get('specs', {})), 'unit': data.get('unit'), 'description': data.get('description'),
+             'images': str(data.get('images', [])), 'status': data.get('status', 'active')}
         )
         product_id = result.fetchone()[0]
         session.commit()
@@ -131,18 +134,20 @@ def update_product(product_id):
     session = db.get_session()
     try:
         fields = []
-        params = []
+        params = {'product_id': product_id}
         for key in ['name', 'category_id', 'supplier_id', 'specs', 'unit', 'description', 'images', 'status']:
             if key in data:
-                fields.append(f"{key} = %s")
-                params.append(data[key])
+                fields.append(f"{key} = :{key}")
+                if key in ['specs', 'images']:
+                    params[key] = str(data[key])
+                else:
+                    params[key] = data[key]
 
         if not fields:
             return error_response('No fields to update', 400)
 
-        params.append(product_id)
         session.execute(
-            f"UPDATE products SET {', '.join(fields)}, updated_at = NOW() WHERE id = %s",
+            text(f"UPDATE products SET {', '.join(fields)}, updated_at = NOW() WHERE id = :product_id"),
             params
         )
         session.commit()
@@ -161,8 +166,8 @@ def delete_product(product_id):
     session = db.get_session()
     try:
         session.execute(
-            "UPDATE products SET status = 'deleted', updated_at = NOW() WHERE id = %s",
-            (product_id,)
+            text("UPDATE products SET status = 'deleted', updated_at = NOW() WHERE id = :product_id"),
+            {'product_id': product_id}
         )
         session.commit()
         return success_response(message='Product deleted')

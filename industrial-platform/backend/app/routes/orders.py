@@ -1,5 +1,6 @@
 import uuid
 from flask import Blueprint, request
+from sqlalchemy import text
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'shared'))
 from shared.auth.decorators import require_auth
@@ -20,13 +21,13 @@ def list_orders():
     session = db.get_session()
     try:
         total = session.execute(
-            "SELECT COUNT(*) FROM orders WHERE buyer_id = %s", (user_id,)
+            text("SELECT COUNT(*) FROM orders WHERE buyer_id = :user_id"), {'user_id': user_id}
         ).fetchone()[0]
 
         results = session.execute(
-            """SELECT id, order_no, buyer_id, status, total_amount, payment_status, delivery_address, remark, created_at
-               FROM orders WHERE buyer_id = %s ORDER BY created_at DESC LIMIT %s OFFSET %s""",
-            (user_id, per_page, (page - 1) * per_page)
+            text("""SELECT id, order_no, buyer_id, status, total_amount, payment_status, delivery_address, remark, created_at
+               FROM orders WHERE buyer_id = :user_id ORDER BY created_at DESC LIMIT :limit OFFSET :offset"""),
+            {'user_id': user_id, 'limit': per_page, 'offset': (page - 1) * per_page}
         ).fetchall()
 
         items = [{
@@ -59,8 +60,8 @@ def create_order():
         # Calculate total
         for item in data['items']:
             sku_result = session.execute(
-                "SELECT price, stock FROM product_skus WHERE id = %s",
-                (item['product_sku_id'],)
+                text("SELECT price, stock FROM product_skus WHERE id = :sku_id"),
+                {'sku_id': item['product_sku_id']}
             ).fetchone()
             if not sku_result:
                 return error_response(f"SKU {item['product_sku_id']} not found", 400)
@@ -75,18 +76,18 @@ def create_order():
 
         # Create order
         result = session.execute(
-            """INSERT INTO orders (order_no, buyer_id, status, total_amount, payment_status, delivery_address, remark)
-               VALUES (%s, %s, 'pending', %s, 'unpaid', %s, %s) RETURNING id""",
-            (order_no, user_id, total_amount,
-             data.get('delivery_address', {}), data.get('remark'))
+            text("""INSERT INTO orders (order_no, buyer_id, status, total_amount, payment_status, delivery_address, remark)
+               VALUES (:order_no, :buyer_id, 'pending', :total_amount, 'unpaid', :delivery_address, :remark) RETURNING id"""),
+            {'order_no': order_no, 'buyer_id': user_id, 'total_amount': total_amount,
+             'delivery_address': str(data.get('delivery_address', {})), 'remark': data.get('remark')}
         )
         order_id = result.fetchone()[0]
 
         # Create order items
         for item in order_items:
             session.execute(
-                "INSERT INTO order_items (order_id, product_sku_id, qty, unit_price, amount) VALUES (%s, %s, %s, %s, %s)",
-                (order_id, item['product_sku_id'], item['qty'], item['unit_price'], item['amount'])
+                text("INSERT INTO order_items (order_id, product_sku_id, qty, unit_price, amount) VALUES (:order_id, :product_sku_id, :qty, :unit_price, :amount)"),
+                {'order_id': order_id, 'product_sku_id': item['product_sku_id'], 'qty': item['qty'], 'unit_price': item['unit_price'], 'amount': item['amount']}
             )
 
         session.commit()
@@ -105,9 +106,9 @@ def get_order(order_id):
     session = db.get_session()
     try:
         result = session.execute(
-            """SELECT id, order_no, buyer_id, status, total_amount, payment_status, delivery_address, remark, created_at
-               FROM orders WHERE id = %s""",
-            (order_id,)
+            text("""SELECT id, order_no, buyer_id, status, total_amount, payment_status, delivery_address, remark, created_at
+               FROM orders WHERE id = :order_id"""),
+            {'order_id': order_id}
         )
         order = result.fetchone()
         if not order:
@@ -115,8 +116,8 @@ def get_order(order_id):
 
         # Get items
         items_result = session.execute(
-            "SELECT id, product_sku_id, qty, unit_price, amount FROM order_items WHERE order_id = %s",
-            (order_id,)
+            text("SELECT id, product_sku_id, qty, unit_price, amount FROM order_items WHERE order_id = :order_id"),
+            {'order_id': order_id}
         )
         items = [{
             'id': r[0], 'product_sku_id': r[1], 'qty': r[2],

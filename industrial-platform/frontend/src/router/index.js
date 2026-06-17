@@ -21,6 +21,7 @@ const routes = [
       { path: 'suppliers', name: 'Suppliers', component: () => import('@/views/Suppliers.vue') },
       { path: 'admin/products', name: 'AdminProducts', component: () => import('@/views/AdminProducts.vue') },
       { path: 'admin/dashboard', name: 'AdminDashboard', component: () => import('@/views/AdminDashboard.vue') },
+      { path: 'supplier/products', name: 'SupplierProducts', component: () => import('@/views/SupplierProducts.vue') },
     ],
   },
 ]

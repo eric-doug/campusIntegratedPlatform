@@ -1,4 +1,5 @@
 from flask import Blueprint, request
+from sqlalchemy import text
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'shared'))
 from shared.auth.decorators import require_auth
@@ -19,13 +20,13 @@ def list_inquiries():
     session = db.get_session()
     try:
         total = session.execute(
-            "SELECT COUNT(*) FROM inquiries WHERE buyer_id = %s", (user_id,)
+            text("SELECT COUNT(*) FROM inquiries WHERE buyer_id = :user_id"), {'user_id': user_id}
         ).fetchone()[0]
 
         results = session.execute(
-            """SELECT id, buyer_id, status, total_items, remark, created_at, updated_at
-               FROM inquiries WHERE buyer_id = %s ORDER BY created_at DESC LIMIT %s OFFSET %s""",
-            (user_id, per_page, (page - 1) * per_page)
+            text("""SELECT id, buyer_id, status, total_items, remark, created_at, updated_at
+               FROM inquiries WHERE buyer_id = :user_id ORDER BY created_at DESC LIMIT :limit OFFSET :offset"""),
+            {'user_id': user_id, 'limit': per_page, 'offset': (page - 1) * per_page}
         ).fetchall()
 
         items = [{
@@ -52,17 +53,17 @@ def create_inquiry():
     try:
         # Create inquiry
         result = session.execute(
-            "INSERT INTO inquiries (buyer_id, total_items, remark) VALUES (%s, %s, %s) RETURNING id",
-            (user_id, len(data['items']), data.get('remark'))
+            text("INSERT INTO inquiries (buyer_id, total_items, remark) VALUES (:buyer_id, :total_items, :remark) RETURNING id"),
+            {'buyer_id': user_id, 'total_items': len(data['items']), 'remark': data.get('remark')}
         )
         inquiry_id = result.fetchone()[0]
 
         # Create items
         for item in data['items']:
             session.execute(
-                "INSERT INTO inquiry_items (inquiry_id, product_sku_id, qty, target_price, remark) VALUES (%s, %s, %s, %s, %s)",
-                (inquiry_id, item.get('product_sku_id'), item['qty'],
-                 item.get('target_price'), item.get('remark'))
+                text("INSERT INTO inquiry_items (inquiry_id, product_sku_id, qty, target_price, remark) VALUES (:inquiry_id, :product_sku_id, :qty, :target_price, :remark)"),
+                {'inquiry_id': inquiry_id, 'product_sku_id': item.get('product_sku_id'), 'qty': item['qty'],
+                 'target_price': item.get('target_price'), 'remark': item.get('remark')}
             )
 
         session.commit()
@@ -81,8 +82,8 @@ def get_inquiry(inquiry_id):
     session = db.get_session()
     try:
         result = session.execute(
-            "SELECT id, buyer_id, status, total_items, remark, created_at FROM inquiries WHERE id = %s",
-            (inquiry_id,)
+            text("SELECT id, buyer_id, status, total_items, remark, created_at FROM inquiries WHERE id = :inquiry_id"),
+            {'inquiry_id': inquiry_id}
         )
         inquiry = result.fetchone()
         if not inquiry:
@@ -90,9 +91,9 @@ def get_inquiry(inquiry_id):
 
         # Get items
         items_result = session.execute(
-            """SELECT ii.id, ii.product_sku_id, ii.qty, ii.target_price, ii.remark
-               FROM inquiry_items ii WHERE ii.inquiry_id = %s""",
-            (inquiry_id,)
+            text("""SELECT ii.id, ii.product_sku_id, ii.qty, ii.target_price, ii.remark
+               FROM inquiry_items ii WHERE ii.inquiry_id = :inquiry_id"""),
+            {'inquiry_id': inquiry_id}
         )
         items = [{
             'id': r[0], 'product_sku_id': r[1], 'qty': r[2],

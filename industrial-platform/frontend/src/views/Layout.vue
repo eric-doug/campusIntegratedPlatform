@@ -20,6 +20,7 @@
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item @click="router.push('/admin/products')">后台管理</el-dropdown-item>
+              <el-dropdown-item @click="router.push('/supplier/products')">供应商商品录入</el-dropdown-item>
               <el-dropdown-item divided @click="handleLogout">退出登录</el-dropdown-item>
             </el-dropdown-menu>
           </template>

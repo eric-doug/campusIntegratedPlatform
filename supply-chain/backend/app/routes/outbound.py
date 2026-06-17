@@ -1,5 +1,6 @@
 import uuid
 from flask import Blueprint, request
+from sqlalchemy import text
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'shared'))
 from shared.auth.decorators import require_auth
@@ -15,10 +16,10 @@ def list_outbound():
     per_page = request.args.get('per_page', 20, type=int)
     session = db.get_session()
     try:
-        total = session.execute("SELECT COUNT(*) FROM outbound_orders").fetchone()[0]
+        total = session.execute(text("SELECT COUNT(*) FROM outbound_orders")).fetchone()[0]
         results = session.execute(
-            "SELECT id, order_no, warehouse_id, type, status, total_qty, remark, created_at FROM outbound_orders ORDER BY created_at DESC LIMIT %s OFFSET %s",
-            (per_page, (page - 1) * per_page)
+            text("SELECT id, order_no, warehouse_id, type, status, total_qty, remark, created_at FROM outbound_orders ORDER BY created_at DESC LIMIT :limit OFFSET :offset"),
+            {'limit': per_page, 'offset': (page - 1) * per_page}
         ).fetchall()
         items = [{
             'id': r[0], 'order_no': r[1], 'warehouse_id': r[2], 'type': r[3],
@@ -40,15 +41,15 @@ def create_outbound():
     session = db.get_session()
     try:
         result = session.execute(
-            "INSERT INTO outbound_orders (order_no, warehouse_id, type, status, total_qty, remark) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
-            (order_no, data['warehouse_id'], data['type'], 'pending', data.get('total_qty', 0), data.get('remark'))
+            text("INSERT INTO outbound_orders (order_no, warehouse_id, type, status, total_qty, remark) VALUES (:order_no, :warehouse_id, :type, 'pending', :total_qty, :remark) RETURNING id"),
+            {'order_no': order_no, 'warehouse_id': data['warehouse_id'], 'type': data['type'], 'total_qty': data.get('total_qty', 0), 'remark': data.get('remark')}
         )
         order_id = result.fetchone()[0]
         if data.get('items'):
             for item in data['items']:
                 session.execute(
-                    "INSERT INTO outbound_items (outbound_order_id, product_sku_id, qty, batch_no, location_id) VALUES (%s, %s, %s, %s, %s)",
-                    (order_id, item.get('product_sku_id'), item['qty'], item.get('batch_no'), item.get('location_id'))
+                    text("INSERT INTO outbound_items (outbound_order_id, product_sku_id, qty, batch_no, location_id) VALUES (:order_id, :product_sku_id, :qty, :batch_no, :location_id)"),
+                    {'order_id': order_id, 'product_sku_id': item.get('product_sku_id'), 'qty': item['qty'], 'batch_no': item.get('batch_no'), 'location_id': item.get('location_id')}
                 )
         session.commit()
         return success_response({'id': order_id, 'order_no': order_no}, 'Outbound order created', 201)

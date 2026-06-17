@@ -1,5 +1,6 @@
 import bcrypt
 from flask import Blueprint, request
+from sqlalchemy import text
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'shared'))
 from shared.auth.jwt_handler import generate_tokens, verify_token, refresh_access_token
@@ -28,7 +29,8 @@ def register():
     try:
         # Check if username exists
         result = session.execute(
-            "SELECT id FROM users WHERE username = %s", (data['username'],)
+            text("SELECT id FROM users WHERE username = :username"), 
+            {'username': data['username']}
         )
         if result.fetchone():
             return error_response('Username already exists', 409)
@@ -40,8 +42,8 @@ def register():
 
         # Insert user
         result = session.execute(
-            "INSERT INTO users (username, phone, email, password_hash) VALUES (%s, %s, %s, %s) RETURNING id",
-            (data['username'], data.get('phone'), data.get('email'), password_hash)
+            text("INSERT INTO users (username, phone, email, password_hash) VALUES (:username, :phone, :email, :password_hash) RETURNING id"),
+            {'username': data['username'], 'phone': data.get('phone'), 'email': data.get('email'), 'password_hash': password_hash}
         )
         user_id = result.fetchone()[0]
         session.commit()
@@ -66,8 +68,8 @@ def login():
     session = db.get_session()
     try:
         result = session.execute(
-            "SELECT id, password_hash, status FROM users WHERE username = %s",
-            (data['username'],)
+            text("SELECT id, password_hash, status FROM users WHERE username = :username"),
+            {'username': data['username']}
         )
         user = result.fetchone()
         if not user:
@@ -82,12 +84,12 @@ def login():
 
         # Get user roles and permissions
         result = session.execute(
-            """SELECT r.code, pp.platform, pp.resource, pp.action
+            text("""SELECT r.code, pp.platform, pp.resource, pp.action
                FROM user_roles ur
                JOIN roles r ON ur.role_id = r.id
                LEFT JOIN platform_permissions pp ON pp.role_id = r.id
-               WHERE ur.user_id = %s""",
-            (user_id,)
+               WHERE ur.user_id = :user_id"""),
+            {'user_id': user_id}
         )
         roles = []
         permissions = []
@@ -126,8 +128,8 @@ def get_current_user():
     session = db.get_session()
     try:
         result = session.execute(
-            "SELECT id, username, phone, email, status FROM users WHERE id = %s",
-            (user_id,)
+            text("SELECT id, username, phone, email, status FROM users WHERE id = :user_id"),
+            {'user_id': user_id}
         )
         user = result.fetchone()
         if not user:

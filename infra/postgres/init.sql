@@ -55,7 +55,7 @@ INSERT INTO roles (name, code, description) VALUES
 
 -- Insert default admin user (password: admin123)
 INSERT INTO users (username, password_hash, status) VALUES
-    ('admin', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.qVh.N9NJ.KQXCK', 'active');
+    ('admin', '$2b$12$iTpMcHC5kcp8MhEdW5snb.r.hCesSvSqhqs1DR0csd/uPTdEQb/jO', 'active');
 
 -- Assign admin role to default user
 INSERT INTO user_roles (user_id, role_id) VALUES (1, 1);
@@ -78,6 +78,7 @@ CREATE TABLE suppliers (
     contact_phone VARCHAR(20),
     business_license VARCHAR(100),
     address TEXT,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     status VARCHAR(20) DEFAULT 'active',
     audit_status VARCHAR(20) DEFAULT 'pending',
     audit_remark TEXT,
