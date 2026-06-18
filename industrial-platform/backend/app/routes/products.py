@@ -22,20 +22,24 @@ def list_products():
 
     session = db.get_session()
     try:
-        query = "SELECT id, name, category_id, supplier_id, specs, unit, description, images, status, created_at FROM products WHERE 1=1"
+        query = """SELECT p.id, p.name, p.category_id, p.supplier_id, p.specs, p.unit, p.description, p.images, p.status, p.created_at,
+                          (SELECT MIN(ps.price) FROM product_skus ps WHERE ps.product_id = p.id AND ps.status = 'active') as min_price,
+                          (SELECT MAX(ps.price) FROM product_skus ps WHERE ps.product_id = p.id AND ps.status = 'active') as max_price,
+                          (SELECT COUNT(*) FROM product_skus ps WHERE ps.product_id = p.id) as sku_count
+                   FROM products p WHERE 1=1"""
         count_query = "SELECT COUNT(*) FROM products WHERE 1=1"
         params = {}
 
         if status:
-            query += " AND status = :status"
+            query += " AND p.status = :status"
             count_query += " AND status = :status"
             params['status'] = status
         if category_id:
-            query += " AND category_id = :category_id"
+            query += " AND p.category_id = :category_id"
             count_query += " AND category_id = :category_id"
             params['category_id'] = category_id
         if keyword:
-            query += " AND (name ILIKE :keyword1 OR description ILIKE :keyword2)"
+            query += " AND (p.name ILIKE :keyword1 OR p.description ILIKE :keyword2)"
             count_query += " AND (name ILIKE :keyword1 OR description ILIKE :keyword2)"
             params['keyword1'] = f'%{keyword}%'
             params['keyword2'] = f'%{keyword}%'
@@ -44,7 +48,7 @@ def list_products():
         total = session.execute(text(count_query), params).fetchone()[0]
 
         # Paginate
-        query += " ORDER BY created_at DESC LIMIT :limit OFFSET :offset"
+        query += " ORDER BY p.created_at DESC LIMIT :limit OFFSET :offset"
         params['limit'] = per_page
         params['offset'] = (page - 1) * per_page
 
@@ -53,6 +57,9 @@ def list_products():
             'id': r[0], 'name': r[1], 'category_id': r[2], 'supplier_id': r[3],
             'specs': r[4], 'unit': r[5], 'description': r[6], 'images': r[7],
             'status': r[8], 'created_at': r[9].isoformat() if r[9] else None,
+            'min_price': float(r[10]) if r[10] else None,
+            'max_price': float(r[11]) if r[11] else None,
+            'sku_count': r[12],
         } for r in results]
 
         return paginate_response(items, total, page, per_page)

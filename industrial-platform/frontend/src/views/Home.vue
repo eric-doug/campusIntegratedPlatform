@@ -17,7 +17,12 @@
                 </div>
                 <div class="product-info">
                   <h4>{{ product.name }}</h4>
-                  <p class="price">¥{{ product.specs?.price || '--' }}</p>
+                  <p class="price">
+                    <template v-if="product.min_price != null">
+                      ¥{{ product.min_price }}<template v-if="product.max_price != null && product.max_price > product.min_price"> - ¥{{ product.max_price }}</template>
+                    </template>
+                    <template v-else>¥--</template>
+                  </p>
                 </div>
               </el-card>
             </el-col>

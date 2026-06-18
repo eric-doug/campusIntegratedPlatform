@@ -3,7 +3,7 @@
     <el-header class="layout-header">
       <div class="header-left">
         <h1 class="logo">工业品交易平台</h1>
-        <el-menu mode="horizontal" :default-active="currentRoute" router class="nav-menu">
+        <el-menu mode="horizontal" :default-active="currentRoute" router :ellipsis="false" class="nav-menu">
           <el-menu-item index="/home">首页</el-menu-item>
           <el-menu-item index="/products">商品中心</el-menu-item>
           <el-menu-item index="/inquiries">询价管理</el-menu-item>
