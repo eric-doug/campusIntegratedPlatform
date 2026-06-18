@@ -17,7 +17,10 @@ def list_products():
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     category_id = request.args.get('category_id', type=int)
+    category = request.args.get('category', '')
     keyword = request.args.get('keyword', '')
+    min_price = request.args.get('min_price', type=float)
+    max_price = request.args.get('max_price', type=float)
     status = request.args.get('status', 'active')
 
     session = db.get_session()
@@ -27,22 +30,34 @@ def list_products():
                           (SELECT MAX(ps.price) FROM product_skus ps WHERE ps.product_id = p.id AND ps.status = 'active') as max_price,
                           (SELECT COUNT(*) FROM product_skus ps WHERE ps.product_id = p.id) as sku_count
                    FROM products p WHERE 1=1"""
-        count_query = "SELECT COUNT(*) FROM products WHERE 1=1"
+        count_query = "SELECT COUNT(*) FROM products p WHERE 1=1"
         params = {}
 
         if status:
             query += " AND p.status = :status"
-            count_query += " AND status = :status"
+            count_query += " AND p.status = :status"
             params['status'] = status
         if category_id:
             query += " AND p.category_id = :category_id"
-            count_query += " AND category_id = :category_id"
+            count_query += " AND p.category_id = :category_id"
             params['category_id'] = category_id
+        if category:
+            query += " AND EXISTS (SELECT 1 FROM categories c WHERE c.id = p.category_id AND c.name ILIKE :category)"
+            count_query += " AND EXISTS (SELECT 1 FROM categories c WHERE c.id = p.category_id AND c.name ILIKE :category)"
+            params['category'] = f'%{category}%'
         if keyword:
             query += " AND (p.name ILIKE :keyword1 OR p.description ILIKE :keyword2)"
-            count_query += " AND (name ILIKE :keyword1 OR description ILIKE :keyword2)"
+            count_query += " AND (p.name ILIKE :keyword1 OR p.description ILIKE :keyword2)"
             params['keyword1'] = f'%{keyword}%'
             params['keyword2'] = f'%{keyword}%'
+        if min_price is not None:
+            query += " AND EXISTS (SELECT 1 FROM product_skus ps WHERE ps.product_id = p.id AND ps.status = 'active' AND ps.price >= :min_price)"
+            count_query += " AND EXISTS (SELECT 1 FROM product_skus ps WHERE ps.product_id = p.id AND ps.status = 'active' AND ps.price >= :min_price)"
+            params['min_price'] = min_price
+        if max_price is not None:
+            query += " AND EXISTS (SELECT 1 FROM product_skus ps WHERE ps.product_id = p.id AND ps.status = 'active' AND ps.price <= :max_price)"
+            count_query += " AND EXISTS (SELECT 1 FROM product_skus ps WHERE ps.product_id = p.id AND ps.status = 'active' AND ps.price <= :max_price)"
+            params['max_price'] = max_price
 
         # Count
         total = session.execute(text(count_query), params).fetchone()[0]
